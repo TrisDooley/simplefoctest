@@ -22,7 +22,8 @@ BLDCMotor motor1 = BLDCMotor(7);
 BLDCDriver3PWM driver1 = BLDCDriver3PWM(26, 27, 14, 12);
 
 //Command settings
-float target_velocity = 0;
+float target_velocity1 = 0;
+float target_velocity2 = 0;
 uint32_t prev_millis;
 
 //Setting the alarm voltage
@@ -34,7 +35,8 @@ void board_init();
 bool flag_under_voltage = false;
 
 Commander command = Commander(Serial);
-void doTarget(char* cmd) { command.scalar(&target_velocity, cmd); }
+void doTarget1(char* cmd) { command.scalar(&target_velocity1, cmd); }
+void doTarget2(char* cmd) { command.scalar(&target_velocity2, cmd); }
 
 void setup() {
   Serial.begin(115200);
@@ -92,7 +94,8 @@ void setup() {
   //Initialize FOC
   motor.initFOC();
   motor1.initFOC();
-  command.add('T', doTarget, "target velocity");
+  command.add('O', doTarget1, "target velocity 1");
+  command.add('T', doTarget2, "target velocity 2");
 
   Serial.println(F("Motor ready."));
   Serial.println(F("Set the target velocity using serial terminal:"));
@@ -103,8 +106,8 @@ void loop() {
   motor.loopFOC();
   motor1.loopFOC();
 
-  motor.move(target_velocity);
-  motor1.move(target_velocity);
+  motor.move(target_velocity1);
+  motor1.move(target_velocity2);
 
   //When the voltage is lower than the set value, the motor will be disabled.
   board_check();
