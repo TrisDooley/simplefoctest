@@ -1,76 +1,105 @@
 #include <Arduino.h>
-
-// MKS ESP32 FOC V2.0 | Open Loop Velocity Example | Library:SimpleFOC 2.2.1 | Hardware:MKS ESP32 FOC V2.0
+// MKS ESP32 FOC V2.0 | Close Loop Velocity Example | Library:SimpleFOC 2.2.1 | Hardware:MKS ESP32 FOC V2.0 & MKS AS5600
 
 // !!!Notice!!!
-// ①Enter "T+number" in the serial port to set the speed of the two motors. For example, if you want to set the motor to rotate at 10 rad/s, enter "T10". The motor will rotate at 5 rad/s by default when powered on.
+// ①Enter "T+number" in the serial port to set the speed of the motor. For example, if you enter "T10", the motor speed will be set to 10rad/s.
 // ②When using your own motor, be sure to modify the default number of pole pairs, that is, the value in BLDCMotor(7), to the number of pole pairs of your own motor.
 // ③Please set the correct voltage_limit value according to the selected motor. It is recommended to set it between 0.5 and 1.0 for the aircraft model motor and below 4 for the gimbal motor. Excessive voltage and current may burn out the driver board!
-// ④Open-loop control inevitably causes heating, so do not run this routine for more than one minute, otherwise overheating will cause the motor or driver board to burn out!
+// ④The pid parameters of this routine can control the 2808 model aircraft motor. If you want to achieve better results or use other motors, please adjust the pid parameters yourself.
 
 #include <SimpleFOC.h>
 
+MagneticSensorI2C sensor = MagneticSensorI2C(AS5600_I2C);
+MagneticSensorI2C sensor1 = MagneticSensorI2C(AS5600_I2C);
+TwoWire I2Cone = TwoWire(0);
+TwoWire I2Ctwo = TwoWire(1);
+
+//Motor parameters
 BLDCMotor motor = BLDCMotor(7);
 BLDCDriver3PWM driver = BLDCDriver3PWM(32, 33, 25, 12);
 
-// BLDC motor & driver instance
 BLDCMotor motor1 = BLDCMotor(7);
 BLDCDriver3PWM driver1 = BLDCDriver3PWM(26, 27, 14, 12);
 
-//Target variable
-float target_velocity = 5;
+//Command settings
+float target_velocity = 0;
 uint32_t prev_millis;
 
 //Setting the alarm voltage
 #define UNDERVOLTAGE_THRES 11.1
-
-//Serial port command settings
-Commander command = Commander(Serial);
-void doTarget(char* cmd) {
-  command.scalar(&target_velocity, cmd);
-  Serial.println("Set Target");
-}
 
 void board_check();
 float get_vin_Volt();
 void board_init();
 bool flag_under_voltage = false;
 
+Commander command = Commander(Serial);
+void doTarget(char* cmd) { command.scalar(&target_velocity, cmd); }
 
 void setup() {
   Serial.begin(115200);
   board_init();
+  
+  I2Cone.begin(19, 18, 400000UL); // AS5600_M0
+  I2Ctwo.begin(23, 5, 400000UL); // AS5600_M1
+  sensor.init(&I2Cone);
+  sensor1.init(&I2Ctwo);
+  //Connect the motor object and the sensor object
+  motor.linkSensor(&sensor);
+  motor1.linkSensor(&sensor1);
 
+  //Supply voltage setting [V]
   driver.voltage_power_supply = get_vin_Volt();
   driver.init();
-  motor.linkDriver(&driver);
-  motor.voltage_limit = 0.8;    // [V]  Please modify and check this value carefully, excessive voltage and current may cause the driver board to burn out!!!
-  motor.velocity_limit = 30;  // [rad/s]
 
   driver1.voltage_power_supply = get_vin_Volt();
   driver1.init();
+  //Connect the motor and driver objects
+  motor.linkDriver(&driver);
   motor1.linkDriver(&driver1);
-  motor1.voltage_limit = 0.8;    // [V] Please modify and check this value carefully, excessive voltage and current may cause the driver board to burn out!!!
-  motor1.velocity_limit = 30;  // [rad/s]
+  
+  //FOC model selection
+  motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
+  motor1.foc_modulation = FOCModulationType::SpaceVectorPWM;
+  //Motion control mode settings
+  motor.controller = MotionControlType::velocity;
+  motor1.controller = MotionControlType::velocity;
 
-  //Open loop control mode setting
-  motor.controller = MotionControlType::velocity_openloop;
-  motor1.controller = MotionControlType::velocity_openloop;
 
-  //Initialize the hardware
+  //Speed ​​PI loop settings
+  motor.PID_velocity.P = 0.021;
+  motor1.PID_velocity.P = 0.021;
+  motor.PID_velocity.I = 0.12;
+  motor1.PID_velocity.I = 0.12;
+  //Maximum motor limiting voltage
+  motor.voltage_limit = 0.5;    // [V] Please modify and check this value carefully, excessive voltage and current may cause the driver board to burn out!!!
+  motor1.voltage_limit = 0.5;    // [V] Please modify and check this value carefully, excessive voltage and current may cause the driver board to burn out!!!
+  
+  //Speed ​​low pass filter time constant
+  motor.LPF_velocity.Tf = 0.01;
+  motor1.LPF_velocity.Tf = 0.01;
+
+  //Set a maximum speed limit
+  motor.velocity_limit = 40;
+  motor1.velocity_limit = 40;
+
+  motor.useMonitoring(Serial);
+  motor1.useMonitoring(Serial);
+  
+  //Initialize the motor
   motor.init();
   motor1.init();
-
-  //Add T command
+  //Initialize FOC
+  motor.initFOC();
+  motor1.initFOC();
   command.add('T', doTarget, "target velocity");
 
-  Serial.println("Motor ready!");
-  Serial.println("Set target velocity [rad/s]");
-  _delay(1000);
+  Serial.println(F("Motor ready."));
+  Serial.println(F("Set the target velocity using serial terminal:"));
+  
 }
 
 void loop() {
-  //Added to make it work with the latest version of SimpleFOC, otherwise the motor will not rotate.
   motor.loopFOC();
   motor1.loopFOC();
 
