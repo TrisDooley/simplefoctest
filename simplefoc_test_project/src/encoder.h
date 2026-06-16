@@ -2,6 +2,7 @@
 #define ENCODER_H
 
 #include <Arduino.h>
+#include <SimpleFOC.h>
 
 // MA704 SSI encoder helper functions for ESP32.
 // These helpers use software bit-banging only.
@@ -19,5 +20,21 @@ uint32_t readMa704RawSSI(int clkPin, int dataPin, int bitCount = MA704_DEFAULT_B
 
 // Convert raw MA704 SSI counts into radians [0..2*PI) using bit-bang read.
 float readMa704AngleRad(int clkPin, int dataPin, int bitCount = MA704_DEFAULT_BITS, int delayUs = MA704_DEFAULT_DELAY_US);
+
+// SimpleFOC sensor wrapper for the MA704 using bit-banged SSI.
+class MA704Sensor : public Sensor {
+  public:
+    MA704Sensor(int clkPin, int dataPin, int bitCount = MA704_DEFAULT_BITS, int delayUs = MA704_DEFAULT_DELAY_US);
+    void init() override;
+
+  protected:
+    float getSensorAngle() override;
+
+  private:
+    int clkPin;
+    int dataPin;
+    int bitCount;
+    int delayUs;
+};
 
 #endif // ENCODER_H

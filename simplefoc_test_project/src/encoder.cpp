@@ -42,3 +42,15 @@ float readMa704AngleRad(int clkPin, int dataPin, int bitCount, int delayUs) {
   return (raw / (float)maxCount) * (2.0f * PI);
 }
 
+MA704Sensor::MA704Sensor(int clkPin, int dataPin, int bitCount, int delayUs)
+  : clkPin(clkPin), dataPin(dataPin), bitCount(bitCount), delayUs(delayUs) {}
+
+void MA704Sensor::init() {
+  initMa704SSI(clkPin, dataPin, delayUs);
+  Sensor::init();
+}
+
+float MA704Sensor::getSensorAngle() {
+  return readMa704AngleRad(clkPin, dataPin, bitCount, delayUs);
+}
+
